@@ -87,11 +87,14 @@ jobs:
 
           if [ -f "./gradlew" ]; then
             echo "Usando Gradle Wrapper..."
+
             chmod +x ./gradlew
+
             ./gradlew assembleDebug --stacktrace
           else
             echo "No hay Gradle Wrapper."
             echo "Usando Gradle instalado..."
+
             gradle assembleDebug --stacktrace
           fi
 
