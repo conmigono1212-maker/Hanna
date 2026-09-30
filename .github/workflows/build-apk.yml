@@ -11,140 +11,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Descargar proyecto
+      - name: Descargar código del repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java 17
+      - name: Configurar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
-
-      - name: Encontrar ZIP del proyecto
-        shell: bash
-        run: |
-          set -e
-
-          echo "Buscando ZIP..."
-
-          ZIP_FILE=$(find . -type f -iname "*.zip" -print -quit)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No se encontró ningún ZIP."
-            echo "Archivos disponibles:"
-            find . -type f -maxdepth 6 -print
-            exit 1
-          fi
-
-          echo "ZIP encontrado:"
-          echo "$ZIP_FILE"
-
-          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
-
-      - name: Extraer proyecto Android
-        shell: bash
-        run: |
-          set -e
-
-          mkdir -p android_extracted
-
-          echo "Extrayendo:"
-          echo "$ZIP_FILE"
-
-          unzip -q "$ZIP_FILE" -d android_extracted
-
-          echo "Proyecto extraído:"
-          find android_extracted -maxdepth 6 -type f -print | head -200
-
-      - name: Encontrar proyecto Gradle Android
-        shell: bash
-        run: |
-          set -e
-
-          echo "Buscando settings.gradle.kts..."
-
-          ANDROID_DIR=$(find android_extracted \
-            -type f \
-            -name "settings.gradle.kts" \
-            -print -quit | xargs -r dirname)
-
-          if [ -z "$ANDROID_DIR" ]; then
-            echo "No se encontró settings.gradle.kts."
-            echo "Buscando settings.gradle..."
-
-            ANDROID_DIR=$(find android_extracted \
-              -type f \
-              -name "settings.gradle" \
-              -print -quit | xargs -r dirname)
-          fi
-
-          if [ -z "$ANDROID_DIR" ]; then
-            echo "ERROR: No se encontró ningún proyecto Gradle."
-            find android_extracted -maxdepth 8 -type f -print
-            exit 1
-          fi
-
-          echo "Proyecto Android encontrado:"
-          echo "$ANDROID_DIR"
-
-          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
-
-      - name: Verificar proyecto Android
-        shell: bash
-        run: |
-          set -e
-
-          echo "Carpeta:"
-          echo "$ANDROID_DIR"
-
-          echo "Contenido:"
-          ls -la "$ANDROID_DIR"
-
-          echo "Contenido de app:"
-          ls -la "$ANDROID_DIR/app"
+      - name: Dar permisos a Gradle
+        run: chmod +x gradlew
 
       - name: Compilar APK
-        shell: bash
-        run: |
-          set -e
-
-          cd "$ANDROID_DIR"
-
-          echo "Compilando desde:"
-          pwd
-
-          gradle assembleDebug --stacktrace
-
-      - name: Buscar APK generado
-        shell: bash
-        run: |
-          set -e
-
-          mkdir -p hanna-apk
-
-          echo "APK encontrados:"
-
-          find "$ANDROID_DIR" \
-            -type f \
-            -name "*.apk" \
-            -print
-
-          find "$ANDROID_DIR" \
-            -type f \
-            -name "*.apk" \
-            -exec cp {} hanna-apk/ \;
-
-          echo "APK preparados:"
-          ls -la hanna-apk
+        run: ./gradlew assembleDebug
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
           name: Hanna-APK
-          path: hanna-apk/*.apk
-          if-no-files-found: error
+          path: app/build/outputs/apk/debug/app-debug.apk
