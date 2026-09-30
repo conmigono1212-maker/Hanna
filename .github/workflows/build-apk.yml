@@ -12,40 +12,94 @@ jobs:
 
     steps:
       - name: Descargar proyecto
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Configurar Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
-      - name: Verificar proyecto Android
-        working-directory: android_project/CyberAssistant_Android_Strong
+      - name: Encontrar proyecto Android
+        shell: bash
         run: |
-          echo "Contenido del proyecto:"
-          ls -la
+          set -e
+
+          echo "Buscando settings.gradle.kts o settings.gradle..."
+
+          ANDROID_DIR=$(find . -type f \( \
+            -name "settings.gradle.kts" \
+            -o -name "settings.gradle" \
+          \) -print -quit | xargs -r dirname)
+
+          if [ -z "$ANDROID_DIR" ]; then
+            echo "ERROR: No se encontró ningún proyecto Gradle Android."
+            echo "Archivos encontrados:"
+            find . -maxdepth 5 -type f | head -200
+            exit 1
+          fi
+
+          echo "Proyecto Android encontrado en:"
+          echo "$ANDROID_DIR"
+
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+
+      - name: Verificar proyecto Android
+        shell: bash
+        run: |
+          set -e
+
+          echo "Carpeta Android:"
+          echo "$ANDROID_DIR"
+
+          echo "Contenido:"
+          ls -la "$ANDROID_DIR"
+
           echo "Contenido de app:"
-          ls -la app
+          ls -la "$ANDROID_DIR/app"
 
       - name: Compilar APK
-        working-directory: android_project/CyberAssistant_Android_Strong
+        shell: bash
         run: |
+          set -e
+
+          cd "$ANDROID_DIR"
+
+          echo "Compilando desde:"
+          pwd
+
           gradle assembleDebug --stacktrace
 
       - name: Buscar APK generado
+        shell: bash
         run: |
-          echo "APK encontrados:"
-          find android_project/CyberAssistant_Android_Strong -type f -name "*.apk" -print
+          set -e
+
+          echo "Buscando APK..."
+
+          mkdir -p hanna-apk
+
+          find "$ANDROID_DIR" \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          find "$ANDROID_DIR" \
+            -type f \
+            -name "*.apk" \
+            -exec cp {} hanna-apk/ \;
+
+          echo "APK preparados:"
+          ls -la hanna-apk
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
           name: Hanna-APK
-          path: android_project/CyberAssistant_Android_Strong/app/build/outputs/apk/debug/*.apk
+          path: hanna-apk/*.apk
           if-no-files-found: error
