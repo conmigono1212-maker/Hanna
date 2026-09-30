@@ -25,26 +25,71 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Encontrar proyecto Android
+      - name: Encontrar ZIP del proyecto
         shell: bash
         run: |
           set -e
 
-          echo "Buscando settings.gradle.kts o settings.gradle..."
+          echo "Buscando ZIP..."
 
-          ANDROID_DIR=$(find . -type f \( \
-            -name "settings.gradle.kts" \
-            -o -name "settings.gradle" \
-          \) -print -quit | xargs -r dirname)
+          ZIP_FILE=$(find . -type f -iname "*.zip" -print -quit)
 
-          if [ -z "$ANDROID_DIR" ]; then
-            echo "ERROR: No se encontró ningún proyecto Gradle Android."
-            echo "Archivos encontrados:"
-            find . -maxdepth 5 -type f | head -200
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No se encontró ningún ZIP."
+            echo "Archivos disponibles:"
+            find . -type f -maxdepth 6 -print
             exit 1
           fi
 
-          echo "Proyecto Android encontrado en:"
+          echo "ZIP encontrado:"
+          echo "$ZIP_FILE"
+
+          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+
+      - name: Extraer proyecto Android
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p android_extracted
+
+          echo "Extrayendo:"
+          echo "$ZIP_FILE"
+
+          unzip -q "$ZIP_FILE" -d android_extracted
+
+          echo "Proyecto extraído:"
+          find android_extracted -maxdepth 6 -type f -print | head -200
+
+      - name: Encontrar proyecto Gradle Android
+        shell: bash
+        run: |
+          set -e
+
+          echo "Buscando settings.gradle.kts..."
+
+          ANDROID_DIR=$(find android_extracted \
+            -type f \
+            -name "settings.gradle.kts" \
+            -print -quit | xargs -r dirname)
+
+          if [ -z "$ANDROID_DIR" ]; then
+            echo "No se encontró settings.gradle.kts."
+            echo "Buscando settings.gradle..."
+
+            ANDROID_DIR=$(find android_extracted \
+              -type f \
+              -name "settings.gradle" \
+              -print -quit | xargs -r dirname)
+          fi
+
+          if [ -z "$ANDROID_DIR" ]; then
+            echo "ERROR: No se encontró ningún proyecto Gradle."
+            find android_extracted -maxdepth 8 -type f -print
+            exit 1
+          fi
+
+          echo "Proyecto Android encontrado:"
           echo "$ANDROID_DIR"
 
           echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
@@ -54,7 +99,7 @@ jobs:
         run: |
           set -e
 
-          echo "Carpeta Android:"
+          echo "Carpeta:"
           echo "$ANDROID_DIR"
 
           echo "Contenido:"
@@ -80,9 +125,9 @@ jobs:
         run: |
           set -e
 
-          echo "Buscando APK..."
-
           mkdir -p hanna-apk
+
+          echo "APK encontrados:"
 
           find "$ANDROID_DIR" \
             -type f \
