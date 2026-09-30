@@ -12,52 +12,40 @@ jobs:
 
     steps:
       - name: Descargar proyecto
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configurar Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Extraer proyecto Android
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Verificar proyecto Android
+        working-directory: android_project/CyberAssistant_Android_Strong
         run: |
-          unzip -o CyberAssistant_Android_Strong.zip -d android_project
+          echo "Contenido del proyecto:"
+          ls -la
+          echo "Contenido de app:"
+          ls -la app
 
-      - name: Encontrar Gradle y compilar APK
-        shell: bash
+      - name: Compilar APK
+        working-directory: android_project/CyberAssistant_Android_Strong
         run: |
-          set -e
-
-          echo "Buscando gradlew..."
-
-          GRADLEW=$(find android_project -type f -name "gradlew" | head -n 1)
-
-          if [ -z "$GRADLEW" ]; then
-            echo "ERROR: No se encontró gradlew dentro del proyecto."
-            echo "Contenido encontrado:"
-            find android_project -maxdepth 5 -type f | head -200
-            exit 1
-          fi
-
-          echo "Gradle encontrado en:"
-          echo "$GRADLEW"
-
-          PROJECT_DIR=$(dirname "$GRADLEW")
-
-          chmod +x "$GRADLEW"
-
-          cd "$PROJECT_DIR"
-
-          ./gradlew assembleDebug --stacktrace
+          gradle assembleDebug --stacktrace
 
       - name: Buscar APK generado
         run: |
-          find android_project -type f -name "*.apk" -print
+          echo "APK encontrados:"
+          find android_project/CyberAssistant_Android_Strong -type f -name "*.apk" -print
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
           name: Hanna-APK
-          path: android_project/**/*.apk
+          path: android_project/CyberAssistant_Android_Strong/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
