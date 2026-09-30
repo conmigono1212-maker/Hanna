@@ -25,7 +25,9 @@ jobs:
         run: |
           set -e
 
-          echo "Buscando archivo ZIP del proyecto Android..."
+          echo "========================================"
+          echo "BUSCANDO PROYECTO ANDROID"
+          echo "========================================"
 
           ZIP=""
 
@@ -62,8 +64,45 @@ jobs:
 
           PROJECT_DIR=$(dirname "$SETTINGS")
 
-          echo "Proyecto Android encontrado en:"
+          echo "========================================"
+          echo "PROYECTO ANDROID ENCONTRADO"
+          echo "========================================"
           echo "$PROJECT_DIR"
+
+          echo "========================================"
+          echo "CONFIGURANDO ANDROIDX"
+          echo "========================================"
+
+          PROPS="$PROJECT_DIR/gradle.properties"
+
+          touch "$PROPS"
+
+          if grep -q '^android.useAndroidX=' "$PROPS"; then
+            sed -i 's/^android.useAndroidX=.*/android.useAndroidX=true/' "$PROPS"
+          else
+            echo 'android.useAndroidX=true' >> "$PROPS"
+          fi
+
+          if grep -q '^android.enableJetifier=' "$PROPS"; then
+            sed -i 's/^android.enableJetifier=.*/android.enableJetifier=true/' "$PROPS"
+          else
+            echo 'android.enableJetifier=true' >> "$PROPS"
+          fi
+
+          if grep -q '^org.gradle.jvmargs=' "$PROPS"; then
+            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8/' "$PROPS"
+          else
+            echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8' >> "$PROPS"
+          fi
+
+          if grep -q '^kotlin.code.style=' "$PROPS"; then
+            sed -i 's/^kotlin.code.style=.*/kotlin.code.style=official/' "$PROPS"
+          else
+            echo 'kotlin.code.style=official' >> "$PROPS"
+          fi
+
+          echo "gradle.properties quedó así:"
+          cat "$PROPS"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
@@ -79,29 +118,36 @@ jobs:
 
           cd "$PROJECT_DIR"
 
-          echo "Directorio del proyecto:"
+          echo "========================================"
+          echo "DIRECTORIO DEL PROYECTO"
+          echo "========================================"
           pwd
 
-          echo "Archivos del proyecto:"
+          echo "========================================"
+          echo "ARCHIVOS DEL PROYECTO"
+          echo "========================================"
           ls -la
+
+          echo "========================================"
+          echo "COMPILANDO APK"
+          echo "========================================"
 
           if [ -f "./gradlew" ]; then
             echo "Usando Gradle Wrapper..."
-
             chmod +x ./gradlew
-
             ./gradlew assembleDebug --stacktrace
           else
             echo "No hay Gradle Wrapper."
-            echo "Usando Gradle instalado..."
-
+            echo "Usando Gradle 8.13 instalado..."
             gradle assembleDebug --stacktrace
           fi
 
       - name: Buscar APK generado
         shell: bash
         run: |
-          echo "Buscando APK..."
+          echo "========================================"
+          echo "BUSCANDO APK"
+          echo "========================================"
 
           find "$PROJECT_DIR" \
             -type f \
