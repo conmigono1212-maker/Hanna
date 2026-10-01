@@ -11,11 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Descargar código del repositorio
+      - name: Descargar repositorio
         uses: actions/checkout@v4
 
       - name: Configurar Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
@@ -25,143 +25,138 @@ jobs:
         run: |
           set -e
 
-          echo "========================================"
-          echo "BUSCANDO PROYECTO ANDROID"
-          echo "========================================"
-
-          if [ -f "Hanna_APK_READY_source.zip" ]; then
-            ZIP="Hanna_APK_READY_source.zip"
-          elif [ -f "CyberAssistant_Android_Strong.zip" ]; then
-            ZIP="CyberAssistant_Android_Strong.zip"
-          else
-            echo "ERROR: No se encontró el ZIP."
-            exit 1
-          fi
-
-          echo "ZIP encontrado: $ZIP"
-
-          rm -rf android-source
-          mkdir -p android-source
-
-          unzip -oq "$ZIP" -d android-source
-
-          echo "========================================"
-          echo "BUSCANDO PROYECTO"
-          echo "========================================"
-
-          SETTINGS=$(find android-source -type f -name "settings.gradle" -print -quit)
-
-          if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find android-source -type f -name "settings.gradle.kts" -print -quit)
-          fi
-
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: No se encontró settings.gradle"
-            echo "Archivos encontrados:"
-            find android-source -type f -print
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$SETTINGS")
-
-          echo "Proyecto encontrado:"
-          echo "$PROJECT_DIR"
-
-          echo "========================================"
-          echo "CONTENIDO DEL PROYECTO"
-          echo "========================================"
-
-          cd "$PROJECT_DIR"
-
-          pwd
+          echo "Contenido inicial:"
           ls -la
 
-          echo "========================================"
-          echo "CONFIGURANDO GRADLE PROPERTIES"
-          echo "========================================"
+          ZIP_FILE="Hanna_APK_READY_source.zip"
 
-          touch gradle.properties
-
-          if grep -q '^android.useAndroidX=' gradle.properties; then
-            sed -i 's/^android.useAndroidX=.*/android.useAndroidX=true/' gradle.properties
-          else
-            echo 'android.useAndroidX=true' >> gradle.properties
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: No se encontró $ZIP_FILE"
+            exit 1
           fi
 
-          if grep -q '^android.enableJetifier=' gradle.properties; then
-            sed -i 's/^android.enableJetifier=.*/android.enableJetifier=true/' gradle.properties
-          else
-            echo 'android.enableJetifier=true' >> gradle.properties
+          echo "Descomprimiendo $ZIP_FILE..."
+          mkdir -p android_source
+          unzip -o "$ZIP_FILE" -d android_source
+
+          echo "Buscando settings.gradle..."
+          SETTINGS_FILE=$(find android_source -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: No se encontró settings.gradle ni settings.gradle.kts"
+            find android_source -maxdepth 5 -type f | head -100
+            exit 1
           fi
 
-          if grep -q '^org.gradle.jvmargs=' gradle.properties; then
-            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8/' gradle.properties
-          else
-            echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8' >> gradle.properties
-          fi
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "========================================"
-          echo "PROYECTO LISTO"
-          echo "========================================"
+          echo "Proyecto encontrado en:"
+          echo "$PROJECT_DIR"
+
+          echo "Contenido del proyecto:"
+          ls -la "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Instalar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
-
-      - name: Verificar Java y Gradle
+      - name: Configurar AndroidX y Gradle
         shell: bash
         run: |
-          echo "========================================"
-          echo "JAVA"
-          echo "========================================"
+          set -e
 
-          java -version
-          javac -version
+          cat >> "$PROJECT_DIR/gradle.properties" <<'EOF'
 
-          echo "========================================"
-          echo "GRADLE"
-          echo "========================================"
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          EOF
+
+      - name: Corregir compatibilidad Java/Kotlin JVM 17
+        shell: bash
+        run: |
+          set -e
+
+          APP_GRADLE="$PROJECT_DIR/app/build.gradle.kts"
+
+          if [ ! -f "$APP_GRADLE" ]; then
+            echo "ERROR: No se encontró:"
+            echo "$APP_GRADLE"
+            echo
+            echo "Archivos encontrados:"
+            find "$PROJECT_DIR" -maxdepth 3 -type f | sort
+            exit 1
+          fi
+
+          echo "Archivo encontrado:"
+          echo "$APP_GRADLE"
+
+          python3 - "$APP_GRADLE" <<'PY'
+          import sys
+
+          path = sys.argv[1]
+
+          with open(path, "r", encoding="utf-8") as f:
+              text = f.read()
+
+          java17 = """
+          // CI: alinear Java y Kotlin en JVM 17
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+          """
+
+          if "sourceCompatibility = JavaVersion.VERSION_17" not in text:
+              with open(path, "a", encoding="utf-8") as f:
+                  f.write(java17)
+
+          print("Compatibilidad Java/Kotlin configurada en JVM 17.")
+          PY
+
+          echo
+          echo "Final de app/build.gradle.kts:"
+          tail -80 "$APP_GRADLE"
+
+      - name: Instalar Gradle 8.13
+        shell: bash
+        run: |
+          set -e
+
+          wget -q https://services.gradle.org/distributions/gradle-8.13-bin.zip
+          unzip -q gradle-8.13-bin.zip
+          echo "$PWD/gradle-8.13/bin" >> "$GITHUB_PATH"
 
           gradle --version
 
       - name: Compilar APK
         shell: bash
         run: |
-          set -o pipefail
+          set -e
 
           cd "$PROJECT_DIR"
 
-          echo "========================================"
-          echo "COMPILANDO HANNA"
-          echo "========================================"
-
-          echo "Directorio:"
+          echo "Proyecto:"
           pwd
 
-          echo "Contenido:"
-          ls -la
+          echo
+          echo "Compilando APK..."
 
-          echo "========================================"
-          echo "EJECUTANDO GRADLE"
-          echo "========================================"
-
-          gradle clean assembleDebug --stacktrace --info
+          gradle clean assembleDebug --stacktrace
 
       - name: Buscar APK generado
         shell: bash
         run: |
-          echo "========================================"
-          echo "BUSCANDO APK"
-          echo "========================================"
+          set -e
+
+          echo "Buscando APK..."
 
           find "$PROJECT_DIR" -type f -name "*.apk" -print
 
-      - name: Guardar APK
+      - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
           name: Hanna-APK
-          path: '**/app/build/outputs/apk/debug/*.apk'
+          path: |
+            **/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
