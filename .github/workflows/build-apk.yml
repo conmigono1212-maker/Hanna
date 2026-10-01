@@ -40,8 +40,9 @@ jobs:
 
           if [ -z "$ZIP" ]; then
             echo "ERROR: No se encontró el ZIP del proyecto Android."
-            echo "Archivos disponibles:"
-            find . -maxdepth 2 -type f -print
+            echo ""
+            echo "Archivos encontrados:"
+            find . -maxdepth 3 -type f -print
             exit 1
           fi
 
@@ -57,20 +58,32 @@ jobs:
           echo "BUSCANDO settings.gradle"
           echo "========================================"
 
-          SETTINGS=$(find android-source -type f \
-            -name "settings.gradle" -o -name "settings.gradle.kts" \
-            -print -quit)
+          SETTINGS=""
+
+          SETTINGS=$(find android-source -type f -name "settings.gradle" -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: No se encontró settings.gradle ni settings.gradle.kts"
+            SETTINGS=$(find android-source -type f -name "settings.gradle.kts" -print -quit)
+          fi
+
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: No se encontró settings.gradle"
+            echo "ni settings.gradle.kts"
             echo ""
-            echo "Contenido del ZIP:"
-            find android-source -maxdepth 5 -type f -print
+            echo "Archivos Gradle encontrados:"
+            find android-source -type f -name "build.gradle" -print
+            find android-source -type f -name "build.gradle.kts" -print
+            find android-source -type f -name "settings.gradle" -print
+            find android-source -type f -name "settings.gradle.kts" -print
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
 
+          echo "settings encontrado:"
+          echo "$SETTINGS"
+
+          echo ""
           echo "Proyecto encontrado en:"
           echo "$PROJECT_DIR"
 
@@ -84,18 +97,17 @@ jobs:
           pwd
 
           echo ""
-          echo "Contenido:"
+          echo "Contenido del proyecto:"
           ls -la
 
           echo ""
-          echo "Archivos Gradle:"
-          find . -maxdepth 3 \
-            -name "build.gradle" \
-            -o -name "build.gradle.kts" \
-            -o -name "settings.gradle" \
-            -o -name "settings.gradle.kts" \
-            -o -name "gradle-wrapper.properties" \
-            -print
+          echo "Archivos importantes:"
+
+          find . -maxdepth 3 -type f -name "build.gradle" -print
+          find . -maxdepth 3 -type f -name "build.gradle.kts" -print
+          find . -maxdepth 3 -type f -name "settings.gradle" -print
+          find . -maxdepth 3 -type f -name "settings.gradle.kts" -print
+          find . -maxdepth 4 -type f -name "gradle-wrapper.properties" -print
 
           echo "========================================"
           echo "CONFIGURANDO GRADLE PROPERTIES"
@@ -135,7 +147,9 @@ jobs:
           echo "BUSCANDO MEMORYSTORE.KT"
           echo "========================================"
 
-          MEMORY_STORE=$(find . -type f -name "MemoryStore.kt" -print -quit || true)
+          MEMORY_STORE=""
+
+          MEMORY_STORE=$(find . -type f -name "MemoryStore.kt" -print -quit)
 
           if [ -n "$MEMORY_STORE" ]; then
 
@@ -222,4 +236,64 @@ jobs:
           cd "$PROJECT_DIR"
 
           echo "========================================"
-         
+          echo "GRADLE WRAPPER"
+          echo "========================================"
+
+          if [ ! -f "./gradlew" ]; then
+            echo "ERROR: El proyecto no contiene gradlew."
+            echo ""
+            echo "Contenido del proyecto:"
+            ls -la
+            exit 1
+          fi
+
+          chmod +x ./gradlew
+
+          echo "gradlew encontrado."
+
+          ./gradlew --version
+
+      - name: Compilar APK
+        shell: bash
+        run: |
+          set -o pipefail
+
+          cd "$PROJECT_DIR"
+
+          echo "========================================"
+          echo "COMPILANDO HANNA"
+          echo "========================================"
+
+          echo "Directorio:"
+          pwd
+
+          echo ""
+          echo "Contenido:"
+          ls -la
+
+          echo ""
+          echo "Iniciando Gradle..."
+
+          chmod +x ./gradlew
+
+          ./gradlew clean assembleDebug \
+            --stacktrace \
+            --info
+
+      - name: Buscar APK generado
+        if: success()
+        shell: bash
+        run: |
+          echo "========================================"
+          echo "BUSCANDO APK GENERADO"
+          echo "========================================"
+
+          find "$PROJECT_DIR" -type f -name "*.apk" -print
+
+      - name: Guardar APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hanna-APK
+          path: '**/app/build/outputs/apk/debug/*.apk'
+          if-no-files-found: erro 
