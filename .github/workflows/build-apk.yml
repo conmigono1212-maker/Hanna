@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Descargar código del repositorio
         uses: actions/checkout@v4
 
@@ -30,19 +29,12 @@ jobs:
           echo "BUSCANDO PROYECTO ANDROID"
           echo "========================================"
 
-          ZIP=""
-
           if [ -f "Hanna_APK_READY_source.zip" ]; then
             ZIP="Hanna_APK_READY_source.zip"
           elif [ -f "CyberAssistant_Android_Strong.zip" ]; then
             ZIP="CyberAssistant_Android_Strong.zip"
-          fi
-
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: No se encontró el ZIP del proyecto Android."
-            echo ""
-            echo "Archivos encontrados:"
-            find . -maxdepth 3 -type f -print
+          else
+            echo "ERROR: No se encontró el ZIP."
             exit 1
           fi
 
@@ -51,14 +43,11 @@ jobs:
           rm -rf android-source
           mkdir -p android-source
 
-          echo "Descomprimiendo proyecto..."
           unzip -oq "$ZIP" -d android-source
 
           echo "========================================"
-          echo "BUSCANDO settings.gradle"
+          echo "BUSCANDO PROYECTO"
           echo "========================================"
-
-          SETTINGS=""
 
           SETTINGS=$(find android-source -type f -name "settings.gradle" -print -quit)
 
@@ -68,157 +57,61 @@ jobs:
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: No se encontró settings.gradle"
-            echo "ni settings.gradle.kts"
-            echo ""
-            echo "Archivos Gradle encontrados:"
-            find android-source -type f -name "build.gradle" -print
-            find android-source -type f -name "build.gradle.kts" -print
-            find android-source -type f -name "settings.gradle" -print
-            find android-source -type f -name "settings.gradle.kts" -print
+            echo "Archivos encontrados:"
+            find android-source -type f -print
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
 
-          echo "settings encontrado:"
-          echo "$SETTINGS"
-
-          echo ""
-          echo "Proyecto encontrado en:"
+          echo "Proyecto encontrado:"
           echo "$PROJECT_DIR"
 
           echo "========================================"
-          echo "VERIFICANDO PROYECTO"
+          echo "CONTENIDO DEL PROYECTO"
           echo "========================================"
 
           cd "$PROJECT_DIR"
 
-          echo "Directorio actual:"
           pwd
-
-          echo ""
-          echo "Contenido del proyecto:"
           ls -la
-
-          echo ""
-          echo "Archivos importantes:"
-
-          find . -maxdepth 3 -type f -name "build.gradle" -print
-          find . -maxdepth 3 -type f -name "build.gradle.kts" -print
-          find . -maxdepth 3 -type f -name "settings.gradle" -print
-          find . -maxdepth 3 -type f -name "settings.gradle.kts" -print
-          find . -maxdepth 4 -type f -name "gradle-wrapper.properties" -print
 
           echo "========================================"
           echo "CONFIGURANDO GRADLE PROPERTIES"
           echo "========================================"
 
-          PROPS="gradle.properties"
+          touch gradle.properties
 
-          touch "$PROPS"
-
-          if grep -q '^android.useAndroidX=' "$PROPS"; then
-            sed -i 's/^android.useAndroidX=.*/android.useAndroidX=true/' "$PROPS"
+          if grep -q '^android.useAndroidX=' gradle.properties; then
+            sed -i 's/^android.useAndroidX=.*/android.useAndroidX=true/' gradle.properties
           else
-            echo 'android.useAndroidX=true' >> "$PROPS"
+            echo 'android.useAndroidX=true' >> gradle.properties
           fi
 
-          if grep -q '^android.enableJetifier=' "$PROPS"; then
-            sed -i 's/^android.enableJetifier=.*/android.enableJetifier=true/' "$PROPS"
+          if grep -q '^android.enableJetifier=' gradle.properties; then
+            sed -i 's/^android.enableJetifier=.*/android.enableJetifier=true/' gradle.properties
           else
-            echo 'android.enableJetifier=true' >> "$PROPS"
+            echo 'android.enableJetifier=true' >> gradle.properties
           fi
 
-          if grep -q '^org.gradle.jvmargs=' "$PROPS"; then
-            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8/' "$PROPS"
+          if grep -q '^org.gradle.jvmargs=' gradle.properties; then
+            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8/' gradle.properties
           else
-            echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8' >> "$PROPS"
+            echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8' >> gradle.properties
           fi
-
-          if ! grep -q '^kotlin.jvm.target.validation.mode=' "$PROPS"; then
-            echo 'kotlin.jvm.target.validation.mode=warning' >> "$PROPS"
-          fi
-
-          echo ""
-          echo "gradle.properties:"
-          cat "$PROPS"
 
           echo "========================================"
-          echo "BUSCANDO MEMORYSTORE.KT"
+          echo "PROYECTO LISTO"
           echo "========================================"
-
-          MEMORY_STORE=""
-
-          MEMORY_STORE=$(find . -type f -name "MemoryStore.kt" -print -quit)
-
-          if [ -n "$MEMORY_STORE" ]; then
-
-            echo "MemoryStore encontrado:"
-            echo "$MEMORY_STORE"
-
-            echo ""
-            echo "Contenido inicial:"
-            nl -ba "$MEMORY_STORE" | sed -n '1,80p'
-
-            python3 - "$MEMORY_STORE" <<'PY'
-          import sys
-          import re
-
-          path = sys.argv[1]
-
-          with open(path, "r", encoding="utf-8") as f:
-              lines = f.readlines()
-
-          changed = False
-
-          for i, line in enumerate(lines):
-
-              if re.search(r'\bfun\s+keys\b', line) and '(' not in line:
-
-                  new_line = re.sub(
-                      r'\bfun\s+keys\b',
-                      'val keys',
-                      line,
-                      count=1
-                  )
-
-                  if new_line.rstrip().endswith(">>"):
-                      newline = "\n" if new_line.endswith("\n") else ""
-                      content = new_line.rstrip("\n")
-                      content = content[:-1]
-                      new_line = content + newline
-
-                  if new_line != line:
-                      lines[i] = new_line
-                      changed = True
-                      print(
-                          f"CORRECCIÓN APLICADA EN LÍNEA {i + 1}"
-                      )
-
-          if changed:
-              with open(path, "w", encoding="utf-8") as f:
-                  f.writelines(lines)
-
-              print("MemoryStore.kt fue corregido automáticamente.")
-          else:
-              print(
-                  "No se encontró una declaración 'fun keys' "
-                  "que requiera esta corrección."
-              )
-          PY
-
-            echo ""
-            echo "MemoryStore.kt después de la revisión:"
-            nl -ba "$MEMORY_STORE" | sed -n '1,80p'
-
-          else
-            echo "ADVERTENCIA: No se encontró MemoryStore.kt."
-            echo "Se continúa con la compilación."
-          fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Verificar Java
+      - name: Instalar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Verificar Java y Gradle
         shell: bash
         run: |
           echo "========================================"
@@ -228,30 +121,11 @@ jobs:
           java -version
           javac -version
 
-      - name: Verificar Gradle Wrapper
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
           echo "========================================"
-          echo "GRADLE WRAPPER"
+          echo "GRADLE"
           echo "========================================"
 
-          if [ ! -f "./gradlew" ]; then
-            echo "ERROR: El proyecto no contiene gradlew."
-            echo ""
-            echo "Contenido del proyecto:"
-            ls -la
-            exit 1
-          fi
-
-          chmod +x ./gradlew
-
-          echo "gradlew encontrado."
-
-          ./gradlew --version
+          gradle --version
 
       - name: Compilar APK
         shell: bash
@@ -267,33 +141,27 @@ jobs:
           echo "Directorio:"
           pwd
 
-          echo ""
           echo "Contenido:"
           ls -la
 
-          echo ""
-          echo "Iniciando Gradle..."
+          echo "========================================"
+          echo "EJECUTANDO GRADLE"
+          echo "========================================"
 
-          chmod +x ./gradlew
-
-          ./gradlew clean assembleDebug \
-            --stacktrace \
-            --info
+          gradle clean assembleDebug --stacktrace --info
 
       - name: Buscar APK generado
-        if: success()
         shell: bash
         run: |
           echo "========================================"
-          echo "BUSCANDO APK GENERADO"
+          echo "BUSCANDO APK"
           echo "========================================"
 
           find "$PROJECT_DIR" -type f -name "*.apk" -print
 
       - name: Guardar APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Hanna-APK
           path: '**/app/build/outputs/apk/debug/*.apk'
-          if-no-files-found: erro 
+          if-no-files-found: error
