@@ -20,6 +20,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Preparar proyecto Android
         shell: bash
@@ -40,24 +41,32 @@ jobs:
 
           if [ -z "$ZIP" ]; then
             echo "ERROR: No se encontró el ZIP del proyecto Android."
+            echo "Archivos disponibles:"
+            find . -maxdepth 2 -type f -print
             exit 1
           fi
 
           echo "ZIP encontrado: $ZIP"
 
+          rm -rf android-source
           mkdir -p android-source
 
           echo "Descomprimiendo proyecto..."
           unzip -oq "$ZIP" -d android-source
 
-          echo "Buscando proyecto..."
+          echo "========================================"
+          echo "BUSCANDO settings.gradle"
+          echo "========================================"
 
           SETTINGS=$(find android-source -type f \
             \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
             -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: No se encontró settings.gradle"
+            echo "ERROR: No se encontró settings.gradle ni settings.gradle.kts"
+            echo ""
+            echo "Contenido del ZIP:"
+            find android-source -maxdepth 5 -type f -print
             exit 1
           fi
 
@@ -67,10 +76,33 @@ jobs:
           echo "$PROJECT_DIR"
 
           echo "========================================"
-          echo "CONFIGURANDO ANDROIDX"
+          echo "VERIFICANDO PROYECTO"
           echo "========================================"
 
-          PROPS="$PROJECT_DIR/gradle.properties"
+          cd "$PROJECT_DIR"
+
+          echo "Directorio actual:"
+          pwd
+
+          echo ""
+          echo "Contenido:"
+          ls -la
+
+          echo ""
+          echo "Archivos Gradle:"
+          find . -maxdepth 3 \
+            \( -name "build.gradle" \
+            -o -name "build.gradle.kts" \
+            -o -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \
+            -o -name "gradle-wrapper.properties" \) \
+            -print
+
+          echo "========================================"
+          echo "CONFIGURANDO GRADLE PROPERTIES"
+          echo "========================================"
+
+          PROPS="gradle.properties"
 
           touch "$PROPS"
 
@@ -92,49 +124,30 @@ jobs:
             echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8' >> "$PROPS"
           fi
 
-          echo 'kotlin.jvm.target.validation.mode=warning' >> "$PROPS"
-
-          echo "========================================"
-          echo "CONFIGURANDO JAVA Y KOTLIN 17"
-          echo "========================================"
-
-          cat >> "$PROJECT_DIR/build.gradle.kts" <<'EOF'
-
-          // Configuración automática Java/Kotlin 17
-          allprojects {
-              tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-                  compilerOptions {
-                      jvmTarget.set(
-                          org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-                      )
-                  }
-              }
-
-              tasks.withType<JavaCompile>().configureEach {
-                  sourceCompatibility = "17"
-                  targetCompatibility = "17"
-              }
-          }
-          EOF
-
-          echo "========================================"
-          echo "BUSCANDO Y CORRIGIENDO MEMORYSTORE.KT"
-          echo "========================================"
-
-          MEMORY_STORE=$(find "$PROJECT_DIR" -type f -name "MemoryStore.kt" -print -quit)
-
-          if [ -z "$MEMORY_STORE" ]; then
-            echo "ERROR: No se encontró MemoryStore.kt"
-            exit 1
+          if ! grep -q '^kotlin.jvm.target.validation.mode=' "$PROPS"; then
+            echo 'kotlin.jvm.target.validation.mode=warning' >> "$PROPS"
           fi
 
-          echo "MemoryStore encontrado:"
-          echo "$MEMORY_STORE"
+          echo ""
+          echo "gradle.properties:"
+          cat "$PROPS"
 
-          echo "Contenido inicial de MemoryStore.kt:"
-          nl -ba "$MEMORY_STORE" | sed -n '1,30p'
+          echo "========================================"
+          echo "BUSCANDO MEMORYSTORE.KT"
+          echo "========================================"
 
-          python3 - "$MEMORY_STORE" <<'PY'
+          MEMORY_STORE=$(find . -type f -name "MemoryStore.kt" -print -quit || true)
+
+          if [ -n "$MEMORY_STORE" ]; then
+
+            echo "MemoryStore encontrado:"
+            echo "$MEMORY_STORE"
+
+            echo ""
+            echo "Contenido inicial:"
+            nl -ba "$MEMORY_STORE" | sed -n '1,80p'
+
+            python3 - "$MEMORY_STORE" <<'PY'
           import sys
           import re
 
@@ -146,17 +159,16 @@ jobs:
           changed = False
 
           for i, line in enumerate(lines):
-              stripped = line.strip()
 
-              # El error de compilación indica una declaración
-              # inválida de "keys" sin cuerpo.
-              # Si aparece como "fun keys" sin paréntesis,
-              # se trata como una propiedad Kotlin.
               if re.search(r'\bfun\s+keys\b', line) and '(' not in line:
-                  new_line = re.sub(r'\bfun\s+keys\b', 'val keys', line, count=1)
 
-                  # Corrige un posible ">>" sobrante al final
-                  # de la declaración del tipo genérico.
+                  new_line = re.sub(
+                      r'\bfun\s+keys\b',
+                      'val keys',
+                      line,
+                      count=1
+                  )
+
                   if new_line.rstrip().endswith(">>"):
                       newline = "\n" if new_line.endswith("\n") else ""
                       content = new_line.rstrip("\n")
@@ -166,40 +178,72 @@ jobs:
                   if new_line != line:
                       lines[i] = new_line
                       changed = True
-                      print(f"CORRECCIÓN APLICADA EN LÍNEA {i + 1}")
+                      print(
+                          f"CORRECCIÓN APLICADA EN LÍNEA {i + 1}"
+                      )
 
           if changed:
               with open(path, "w", encoding="utf-8") as f:
                   f.writelines(lines)
+
               print("MemoryStore.kt fue corregido automáticamente.")
           else:
-              print("No se encontró una declaración 'fun keys' que requiera esta corrección.")
+              print(
+                  "No se encontró una declaración 'fun keys' "
+                  "que requiera esta corrección."
+              )
           PY
 
-          echo "========================================"
-          echo "MEMORYSTORE.KT DESPUÉS DE LA CORRECCIÓN"
-          echo "========================================"
+            echo ""
+            echo "MemoryStore.kt después de la revisión:"
+            nl -ba "$MEMORY_STORE" | sed -n '1,80p'
 
-          nl -ba "$MEMORY_STORE" | sed -n '1,30p'
+          else
+            echo "ADVERTENCIA: No se encontró MemoryStore.kt."
+            echo "Se continúa con la compilación."
+          fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
 
       - name: Verificar Java
         shell: bash
         run: |
+          echo "========================================"
+          echo "JAVA"
+          echo "========================================"
+
           java -version
           javac -version
-          gradle --version
+
+      - name: Verificar Gradle Wrapper
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "========================================"
+          echo "GRADLE WRAPPER"
+          echo "========================================"
+
+          if [ ! -f "./gradlew" ]; then
+            echo "ERROR: El proyecto no contiene gradlew."
+            echo ""
+            echo "Contenido del proyecto:"
+            ls -la
+            exit 1
+          fi
+
+          chmod +x ./gradlew
+
+          echo "gradlew encontrado."
+
+          ./gradlew --version
 
       - name: Compilar APK
         shell: bash
         run: |
-          set -e
+          set -o pipefail
 
           cd "$PROJECT_DIR"
 
@@ -210,17 +254,21 @@ jobs:
           echo "Directorio:"
           pwd
 
-          echo "Archivos:"
+          echo ""
+          echo "Contenido:"
           ls -la
 
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew clean assembleDebug --stacktrace
-          else
-            gradle clean assembleDebug --stacktrace
-          fi
+          echo ""
+          echo "Iniciando Gradle..."
+
+          chmod +x ./gradlew
+
+          ./gradlew clean assembleDebug \
+            --stacktrace \
+            --info
 
       - name: Buscar APK generado
+        if: success()
         shell: bash
         run: |
           echo "========================================"
@@ -233,6 +281,7 @@ jobs:
             -print
 
       - name: Guardar APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Hanna-APK
