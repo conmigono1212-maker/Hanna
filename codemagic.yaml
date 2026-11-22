@@ -65,57 +65,10 @@ workflows:
           import pathlib, re, sys
           path = pathlib.Path(sys.argv[1])
           source = path.read_text()
-          pattern = r'(?m)^\s*fun\s+keys\s*\([^)]*\)\s*:\s*Set\s*<\s*String\s*[^\n]*
-        script: |
-          set -e
-
-          PROJECT_DIR=$(cat /tmp/hannah-project-dir)
-
-          if [ -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            cat >> "$PROJECT_DIR/app/build.gradle.kts" <<'EOF'
-
-          android {
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-          }
-          EOF
-
-          elif [ -f "$PROJECT_DIR/app/build.gradle" ]; then
-            cat >> "$PROJECT_DIR/app/build.gradle" <<'EOF'
-
-          android {
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-          }
-          EOF
-
-          else
-            echo "ERROR: No se encontró app/build.gradle"
-            exit 1
-          fi
-
-          cd "$PROJECT_DIR"
-
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug --stacktrace
-          else
-            gradle assembleDebug --stacktrace
-          fi
-
-    artifacts:
-      - android-source/**/build/outputs/apk/**/*.apk
-
-          replacement = '    fun keys(): Set<String> = memory.keys'
-          if not re.search(pattern, source):
-              print("ERROR: No se encontró la declaración esperada de keys()")
-              sys.exit(1)
-          source = re.sub(pattern, replacement, source, count=1)
-          path.write_text(source)
+          fixed = re.sub(r'(Set\s*<\s*String\s*>)\s*=', r'\1 =', source)
+          if fixed == source:
+              print("No fue necesario ajustar el espaciado de keys")
+          path.write_text(fixed)
           PY
 
       - name: Compilar APK Android
