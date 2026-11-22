@@ -44,9 +44,12 @@ workflows:
           PROJECT_DIR=$(cat /tmp/hannah-project-dir)
           MAIN="$PROJECT_DIR/app/src/main/java/com/cyberassistant/ui/MainActivity.kt"
           if [ -f "$MAIN" ] && ! grep -q 'OptIn(androidx.compose.material3.ExperimentalMaterial3Api' "$MAIN"; then
-            sed -i.bak '1i\
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)\
-' "$MAIN"
+            python3 - "$MAIN" <<'PY'
+            import pathlib, sys
+            path = pathlib.Path(sys.argv[1])
+            source = path.read_text()
+            path.write_text("@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)\n" + source)
+            PY
           fi
 
       - name: Corregir MemoryStore Kotlin
