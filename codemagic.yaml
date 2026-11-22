@@ -1,0 +1,52 @@
+
+workflows:
+  hannah-android:
+    name: Compilar HANNAH APK
+    max_build_duration: 60
+    environment:
+      java: 17
+    scripts:
+      - name: Preparar proyecto HANNAH
+        script: |
+          set -e
+          if [ -f Hanna_APK_READY_source.zip ]; then
+            ZIP=Hanna_APK_READY_source.zip
+          elif [ -f CyberAssistant_Android_Strong.zip ]; then
+            ZIP=CyberAssistant_Android_Strong.zip
+          else
+            echo "No se encontró el ZIP Android"
+            exit 1
+          fi
+
+          mkdir -p android-source
+          unzip -oq "$ZIP" -d android-source
+
+          SETTINGS=$(find android-source -type f \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
+            -print -quit)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "No se encontró el proyecto Gradle"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "$PROJECT_DIR" > /tmp/hannah-project-dir
+
+          echo "android.useAndroidX=true" >> "$PROJECT_DIR/gradle.properties"
+
+      - name: Compilar APK Android
+        script: |
+          set -e
+          PROJECT_DIR=$(cat /tmp/hannah-project-dir)
+          cd "$PROJECT_DIR"
+
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
+
+    artifacts:
+      - android-source/**/build/outputs/apk/**/*.apk
