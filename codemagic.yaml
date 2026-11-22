@@ -65,9 +65,60 @@ workflows:
           import pathlib, re, sys
           path = pathlib.Path(sys.argv[1])
           source = path.read_text()
-          fixed = re.sub(r'(Set\s*<\s*String\s*>)\s*=', r'\1 =', source)
-          if fixed == source:
-              print("No fue necesario ajustar el espaciado de keys")
+          field = re.search(r'(?m)^\s*private\s+val\s+(\w+)\s*=\s*ConcurrentHashMap', source)
+          if not field:
+              raise SystemExit("ERROR: No se encontró el mapa de memoria")
+          line = '    fun keys(): Set<String> = ' + field.group(1) + '.keys'
+          fixed, count = re.subn(r'(?m)^\s*fun\s+keys\s*\([^\n]*
+          PY
+
+      - name: Compilar APK Android
+        script: |
+          set -e
+
+          PROJECT_DIR=$(cat /tmp/hannah-project-dir)
+
+          if [ -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            cat >> "$PROJECT_DIR/app/build.gradle.kts" <<'EOF'
+
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+          EOF
+
+          elif [ -f "$PROJECT_DIR/app/build.gradle" ]; then
+            cat >> "$PROJECT_DIR/app/build.gradle" <<'EOF'
+
+          android {
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          EOF
+
+          else
+            echo "ERROR: No se encontró app/build.gradle"
+            exit 1
+          fi
+
+          cd "$PROJECT_DIR"
+
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
+
+    artifacts:
+      - android-source/**/build/outputs/apk/**/*.apk
+, line, source, count=1)
+          if count != 1:
+              raise SystemExit("ERROR: No se encontró keys()")
           path.write_text(fixed)
           PY
 
