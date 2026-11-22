@@ -5,16 +5,18 @@ workflows:
     max_build_duration: 60
     environment:
       java: 17
+
     scripts:
       - name: Preparar proyecto HANNAH
         script: |
           set -e
+
           if [ -f Hanna_APK_READY_source.zip ]; then
             ZIP=Hanna_APK_READY_source.zip
           elif [ -f CyberAssistant_Android_Strong.zip ]; then
             ZIP=CyberAssistant_Android_Strong.zip
           else
-            echo "No se encontró el ZIP Android"
+            echo "ERROR: No se encontró el ZIP Android"
             exit 1
           fi
 
@@ -26,19 +28,49 @@ workflows:
             -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "No se encontró el proyecto Gradle"
+            echo "ERROR: No se encontró el proyecto Gradle"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
           echo "$PROJECT_DIR" > /tmp/hannah-project-dir
 
+          touch "$PROJECT_DIR/gradle.properties"
           echo "android.useAndroidX=true" >> "$PROJECT_DIR/gradle.properties"
 
       - name: Compilar APK Android
         script: |
           set -e
+
           PROJECT_DIR=$(cat /tmp/hannah-project-dir)
+
+          if [ -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            cat >> "$PROJECT_DIR/app/build.gradle.kts" <<'EOF'
+
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+          EOF
+
+          elif [ -f "$PROJECT_DIR/app/build.gradle" ]; then
+            cat >> "$PROJECT_DIR/app/build.gradle" <<'EOF'
+
+          android {
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          EOF
+
+          else
+            echo "ERROR: No se encontró app/build.gradle"
+            exit 1
+          fi
+
           cd "$PROJECT_DIR"
 
           if [ -f gradlew ]; then
