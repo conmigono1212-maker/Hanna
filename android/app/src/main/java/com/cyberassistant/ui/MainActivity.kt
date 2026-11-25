@@ -124,9 +124,6 @@ private fun HannahChat(client: ChatClient, voice: VoiceEngine) {
                     modifier = Modifier.size(100.dp).clip(RoundedCornerShape(16.dp))
                 )
                 Text("HANNAH", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
-                TextButton(onClick = { showSettings = true }, enabled = !busy) {
-                    Text(if (apiKey.isBlank()) "Conectar" else "Ajustes")
-                }
             }
             OutlinedButton(onClick = { showPlatforms = true }) {
                 Text("💼 Plataformas")
