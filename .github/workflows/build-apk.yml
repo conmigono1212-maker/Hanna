@@ -3,7 +3,7 @@ name: Build HANNAH APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, hannah-plataformas]
 
 jobs:
   build:
@@ -17,7 +17,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Compilar APK
         working-directory: android
-        run: bash ./gradlew --no-daemon assembleDebug
+        run: bash ./gradlew --no-daemon testDebugUnitTest assembleDebug
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
