@@ -7,6 +7,8 @@ plugins {
 
 android {
  namespace="com.cyberassistant"
+ ndkVersion="27.2.12479018"
+ externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
  compileSdk=36
  compileOptions {
   sourceCompatibility = JavaVersion.VERSION_17
@@ -15,14 +17,16 @@ android {
  buildFeatures { compose = true }
  defaultConfig {
   applicationId="com.cyberassistant"
+  ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
   minSdk=26
   targetSdk=36
-  versionCode=6
-  versionName="1.2.3"
+  versionCode=7
+  versionName="1.2.4"
  }
 }
 
 dependencies {
+ implementation("org.jsoup:jsoup:1.18.3")
  implementation("androidx.core:core-ktx:1.17.0")
  implementation("androidx.activity:activity-compose:1.11.0")
  implementation("androidx.compose.ui:ui:1.9.2")

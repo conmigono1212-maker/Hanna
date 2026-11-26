@@ -63,18 +63,6 @@ internal fun PlatformsSheet(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     openPlatform(
-                        Uri.parse("https://waze.com/ul").buildUpon()
-                            .appendQueryParameter("q", address)
-                            .appendQueryParameter("utm_source", "hannah")
-                            .build()
-                    )
-                }
-            ) { Text("Buscar destino en Waze") }
-            Button(
-                enabled = address.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-                onClick = {
-                    openPlatform(
                         Uri.parse("https://www.google.com/maps/dir/").buildUpon()
                             .appendQueryParameter("api", "1")
                             .appendQueryParameter("destination", address)
@@ -82,7 +70,7 @@ internal fun PlatformsSheet(
                             .build()
                     )
                 }
-            ) { Text("Ver ruta en Google Maps") }
+            ) { Text("Navegador") }
             if (openError) {
                 Text(
                     "No hay una aplicación disponible para abrir el enlace.",

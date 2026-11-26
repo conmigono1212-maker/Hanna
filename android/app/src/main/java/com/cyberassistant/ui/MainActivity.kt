@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
-        val client = ChatClient()
+        val client = ChatClient(this)
         val voice = VoiceEngine(this)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(
@@ -59,8 +59,8 @@ private fun HannahChat(client: ChatClient, voice: VoiceEngine) {
     var showPlatforms by rememberSaveable { mutableStateOf(false) }
     var destination by rememberSaveable { mutableStateOf("") }
     val history = remember { mutableStateListOf<ChatMessage>() }
-    var apiKey by remember { mutableStateOf("") }
-    var showSettings by remember { mutableStateOf(false) }
+    var modelReady by remember { mutableStateOf(client.ready) }
+    var percent by remember { mutableIntStateOf(0) }
     var draft by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -69,34 +69,6 @@ private fun HannahChat(client: ChatClient, voice: VoiceEngine) {
 
     LaunchedEffect(history.size) {
         if (history.isNotEmpty()) listState.animateScrollToItem(history.size - 1)
-    }
-
-    if (showSettings) {
-        var enteredKey by remember { mutableStateOf(apiKey) }
-        AlertDialog(
-            onDismissRequest = { showSettings = false },
-            title = { Text("Conectar con OpenAI") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("La clave dura esta sesión. Tus mensajes se envían a OpenAI para generar respuestas.")
-                    OutlinedTextField(
-                        value = enteredKey,
-                        onValueChange = { enteredKey = it },
-                        label = { Text("Clave de la API") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    apiKey = enteredKey.trim()
-                    showSettings = false
-                }) { Text("Listo") }
-            },
-            dismissButton = { TextButton(onClick = { showSettings = false }) { Text("Cerrar") } }
-        )
     }
 
     if (showPlatforms) {
@@ -128,6 +100,22 @@ private fun HannahChat(client: ChatClient, voice: VoiceEngine) {
             OutlinedButton(onClick = { showPlatforms = true }) {
                 Text("💼 Plataformas")
             }
+            if (!modelReady) {
+                TextButton(enabled = !busy, onClick = {
+                    busy = true
+                    error = null
+                    scope.launch {
+                        try {
+                            client.download { percent = it }
+                            modelReady = client.ready
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            error = e.message ?: "No se pudo descargar el modelo."
+                        } finally { busy = false }
+                    }
+                }) { Text(if (busy && percent > 0) "Descargando $percent %" else "Descargar modelo (1,12 GB)") }
+            }
             if (history.isEmpty()) {
                 Text("Hola, soy HANNAH. ¿En qué te ayudo?", style = MaterialTheme.typography.titleMedium)
             }
@@ -145,7 +133,7 @@ private fun HannahChat(client: ChatClient, voice: VoiceEngine) {
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Column(Modifier.padding(12.dp)) {
-                                Text(message.text)
+                                androidx.compose.foundation.text.selection.SelectionContainer { Text(message.text) }
                                 if (!own) {
                                     TextButton(onClick = { voice.speak(message.text) }) {
                                         Text("Escuchar respuesta")
@@ -174,34 +162,29 @@ private fun HannahChat(client: ChatClient, voice: VoiceEngine) {
                 Button(
                     enabled = draft.isNotBlank() && !busy,
                     onClick = {
-                        if (apiKey.isBlank()) {
-                            showSettings = true
-                        } else {
-                            val prompt = draft.trim()
-                            val message = ChatMessage("user", prompt)
-                            val key = apiKey
-                            history.add(message)
-                            draft = ""
-                            error = null
-                            busy = true
-                            scope.launch {
-                                try {
-                                    val reply = client.reply(key, history.toList())
-                                    history.add(ChatMessage("assistant", reply))
-                                } catch (exception: CancellationException) {
-                                    throw exception
-                                } catch (exception: Exception) {
-                                    history.removeAt(history.lastIndex)
-                                    draft = prompt
-                                    error = when (exception) {
-                                        is java.net.SocketTimeoutException -> "La conexión tardó demasiado. Intenta de nuevo."
-                                        is java.net.UnknownHostException -> "Revisa tu conexión a internet."
-                                        is IOException -> exception.message ?: "No se pudo conectar con OpenAI."
-                                        else -> "No se pudo leer la respuesta. Intenta de nuevo."
-                                    }
-                                } finally {
-                                    busy = false
+                        val prompt = draft.trim()
+                        val message = ChatMessage("user", prompt)
+                        history.add(message)
+                        draft = ""
+                        error = null
+                        busy = true
+                        scope.launch {
+                            try {
+                                val reply = client.reply(history.toList())
+                                history.add(ChatMessage("assistant", reply))
+                            } catch (exception: CancellationException) {
+                                throw exception
+                            } catch (exception: Exception) {
+                                history.removeAt(history.lastIndex)
+                                draft = prompt
+                                error = when (exception) {
+                                    is java.net.SocketTimeoutException -> "La conexión tardó demasiado. Intenta de nuevo."
+                                    is java.net.UnknownHostException -> "Revisa tu conexión a internet."
+                                    is IOException -> exception.message ?: "No se pudo completar la operación."
+                                    else -> "No se pudo leer la respuesta. Intenta de nuevo."
                                 }
+                            } finally {
+                                busy = false
                             }
                         }
                     }
