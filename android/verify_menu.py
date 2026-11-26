@@ -23,6 +23,9 @@ def find(label, timeout=45, *, field=False):
             ):
                 return node
         time.sleep(1)
+    print("Pantalla:", [n.get("text") for n in screen() if n.get("text")], flush=True)
+    print(adb("logcat", "-b", "crash", "-d")[-6000:], flush=True)
+    print(adb("logcat", "-d", "-t", "2000")[-4000:], flush=True)
     raise RuntimeError("No apareció " + label)
 
 
@@ -64,6 +67,6 @@ else:
     raise RuntimeError("No terminó la descarga del modelo")
 adb("shell", "cmd", "connectivity", "airplane-mode", "enable")
 send("Di hola en castellano.")
-find("Escuchar respuesta", 180)
+find("Escuchar respuesta", 300)
 nodes = screen()
 print("Respuesta sin red:", [n.get("text") for n in nodes if n.get("text")], flush=True)
