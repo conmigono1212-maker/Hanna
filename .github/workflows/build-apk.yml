@@ -1,178 +1,41 @@
-name: Build Hanna APK
+name: Build HANNAH APK
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main, hannah-plataformas]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-
-      - name: Descargar código del repositorio
-        uses: actions/checkout@v4
-
-      - name: Configurar Java 17
-        uses: actions/setup-java@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Preparar proyecto Android
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "BUSCANDO PROYECTO ANDROID"
-          echo "========================================"
-
-          ZIP=""
-
-          if [ -f "Hanna_APK_READY_source.zip" ]; then
-            ZIP="Hanna_APK_READY_source.zip"
-          elif [ -f "CyberAssistant_Android_Strong.zip" ]; then
-            ZIP="CyberAssistant_Android_Strong.zip"
-          fi
-
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: No se encontró el ZIP del proyecto Android."
-            exit 1
-          fi
-
-          echo "ZIP encontrado: $ZIP"
-
-          mkdir -p android-source
-
-          echo "Descomprimiendo proyecto..."
-          unzip -oq "$ZIP" -d android-source
-
-          echo "Buscando proyecto..."
-
-          SETTINGS=$(find android-source -type f \
-            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
-            -print -quit)
-
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: No se encontró settings.gradle"
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$SETTINGS")
-
-          echo "Proyecto encontrado en:"
-          echo "$PROJECT_DIR"
-
-          echo "========================================"
-          echo "CONFIGURANDO ANDROIDX"
-          echo "========================================"
-
-          PROPS="$PROJECT_DIR/gradle.properties"
-
-          touch "$PROPS"
-
-          if grep -q '^android.useAndroidX=' "$PROPS"; then
-            sed -i 's/^android.useAndroidX=.*/android.useAndroidX=true/' "$PROPS"
-          else
-            echo 'android.useAndroidX=true' >> "$PROPS"
-          fi
-
-          if grep -q '^android.enableJetifier=' "$PROPS"; then
-            sed -i 's/^android.enableJetifier=.*/android.enableJetifier=true/' "$PROPS"
-          else
-            echo 'android.enableJetifier=true' >> "$PROPS"
-          fi
-
-          if grep -q '^org.gradle.jvmargs=' "$PROPS"; then
-            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8/' "$PROPS"
-          else
-            echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8' >> "$PROPS"
-          fi
-
-          echo "========================================"
-          echo "CONFIGURANDO JAVA Y KOTLIN EN 17"
-          echo "========================================"
-
-          echo 'kotlin.jvm.target.validation.mode=warning' >> "$PROPS"
-
-          cat >> "$PROJECT_DIR/build.gradle.kts" <<'EOF'
-
-          // Configuración automática para compatibilidad Java/Kotlin 17
-          allprojects {
-              tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-                  compilerOptions {
-                      jvmTarget.set(
-                          org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-                      )
-                  }
-              }
-
-              tasks.withType<JavaCompile>().configureEach {
-                  sourceCompatibility = "17"
-                  targetCompatibility = "17"
-              }
-          }
-          EOF
-
-          echo "gradle.properties:"
-          cat "$PROPS"
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
-
-      - name: Verificar Java
-        shell: bash
-        run: |
-          java -version
-          javac -version
-          gradle --version
-
+      - uses: gradle/actions/setup-gradle@v4
       - name: Compilar APK
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          echo "========================================"
-          echo "COMPILANDO HANNA"
-          echo "========================================"
-
-          echo "Directorio:"
-          pwd
-
-          echo "Archivos:"
-          ls -la
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew clean assembleDebug --stacktrace
-          else
-            gradle clean assembleDebug --stacktrace
-          fi
-
-      - name: Buscar APK generado
-        shell: bash
-        run: |
-          echo "========================================"
-          echo "BUSCANDO APK"
-          echo "========================================"
-
-          find "$PROJECT_DIR" \
-            -type f \
-            -name "*.apk" \
-            -print
-
+        working-directory: android
+        run: bash ./gradlew --no-daemon testDebugUnitTest assembleDebug
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
-          name: Hanna-APK
-          path: '**/app/build/outputs/apk/debug/*.apk'
+          name: HANNAH-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Habilitar aceleración del emulador
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Probar menú, búsqueda y chat en Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          ram-size: 4096M
+          disk-size: 8G
+          disable-animations: true
+          script: python3 android/verify_menu.py
